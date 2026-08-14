@@ -12,6 +12,7 @@ socket io client
 npm create vite@latest frontend
 cd frontend
 npm install
+npm i simple-peer
 
 
 npm install axios socket.io-client react-router-dom
