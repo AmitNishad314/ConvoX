@@ -1,120 +1,144 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import socket from "../services/socket";
+import { createPeerConnection } from "../services/webrtc";
 import VideoPlayer from "../components/VideoPlayer";
 
 const Meeting = () => {
   const { roomId } = useParams();
 
-  const myVideo = useRef(null);
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStreams, setRemoteStreams] = useState([]);
 
-  const [stream, setStream] = useState(null);
-  const [participants, setParticipants] = useState([]);
+  const peers = useRef({});
 
   useEffect(() => {
     socket.connect();
-  
-    socket.on("connect", () => {
-      console.log("Socket Connected:", socket.id);
-    });
-  
+
     navigator.mediaDevices
       .getUserMedia({
         video: true,
         audio: true,
       })
-      .then((currentStream) => {
-        setStream(currentStream);
-  
-        if (myVideo.current) {
-          myVideo.current.srcObject = currentStream;
-        }
-  
-        console.log("Joining room:", roomId);
-  
-        socket.emit("join-call", roomId);
-      })
-      .catch((err) => {
-        console.log(err);
-      });
-  
-    socket.on("user-joined", (socketId) => {
-      console.log("User Joined:", socketId);
-  
-      setParticipants((prev) => {
-        if (prev.includes(socketId)) return prev;
-        return [...prev, socketId];
-      });
-    });
-  
-    socket.on("user-left", (socketId) => {
-      console.log("User Left:", socketId);
-  
-      setParticipants((prev) =>
-        prev.filter((id) => id !== socketId)
-      );
-    });
-  
-    return () => {
-      socket.off("connect");
-      socket.off("user-joined");
-      socket.off("user-left");
-      socket.disconnect();
-    };
-  }, [roomId]);
+      .then(async (stream) => {
+        setLocalStream(stream);
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-white">
+        socket.emit("join-room", roomId);
 
-      <div className="flex justify-between items-center px-8 py-5 border-b border-slate-800">
+        socket.on("room-users", async (users) => {
+          for (const id of users) {
+            const peer = createPeerConnection(
+              id,
+              socket,
+              stream,
+              (remoteStream, peerId) => {
+                setRemoteStreams((prev) => {
+                  if (prev.find((x) => x.id === peerId)) return prev;
+                  return [...prev, { id: peerId, stream: remoteStream }];
+                });
+              }
+            );
 
-        <h1 className="text-3xl font-bold text-indigo-500">
-          ConvoX
-        </h1>
+            peers.current[id] = peer;
 
-        <p>
-          Room :
-          <span className="ml-2 text-green-400">
-            {roomId}
-          </span>
-        </p>
+            const offer = await peer.createOffer();
+            await peer.setLocalDescription(offer);
 
-      </div>
+            socket.emit("offer", {
+              target: id,
+              offer,
+            });
+          }
+        });
 
-      <div className="p-10">
+        socket.on("user-joined", (id) => {
+          console.log("User joined:", id);
+        });
 
-      <VideoPlayer
-    stream={stream}
-    muted={true}
-/>
+        socket.on("offer", async ({ offer, caller }) => {
+          const peer = createPeerConnection(
+            caller,
+            socket,
+            stream,
+            (remoteStream, peerId) => {
+              setRemoteStreams((prev) => {
+                if (prev.find((x) => x.id === peerId)) return prev;
+                return [...prev, { id: peerId, stream: remoteStream }];
+              });
+            }
+          );
 
-        <div className="mt-8">
+          peers.current[caller] = peer;
 
-          <h2 className="text-xl font-semibold">
-            Participants
-          </h2>
+          await peer.setRemoteDescription(
+            new RTCSessionDescription(offer)
+          );
 
-          {
-            participants.length === 0 ? (
-              <p className="text-slate-400 mt-2">
-                Waiting for others...
-              </p>
-            ) : (
-              participants.map((id) => (
-                <div
-                  key={id}
-                  className="mt-2 bg-slate-800 rounded-lg p-3"
-                >
-                  {id}
-                </div>
-              ))
-            )
+          const answer = await peer.createAnswer();
+
+          await peer.setLocalDescription(answer);
+
+          socket.emit("answer", {
+            target: caller,
+            answer,
+          });
+        });
+
+        socket.on("answer", async ({ answer, caller }) => {
+          await peers.current[caller].setRemoteDescription(
+            new RTCSessionDescription(answer)
+          );
+        });
+
+        socket.on("ice-candidate", async ({ candidate, caller }) => {
+          if (peers.current[caller]) {
+            await peers.current[caller].addIceCandidate(
+              new RTCIceCandidate(candidate)
+            );
+          }
+        });
+
+        socket.on("user-left", (id) => {
+          if (peers.current[id]) {
+            peers.current[id].close();
+            delete peers.current[id];
           }
 
-        </div>
+          setRemoteStreams((prev) =>
+            prev.filter((x) => x.id !== id)
+          );
+        });
+      });
 
+    return () => {
+      socket.disconnect();
+
+      Object.values(peers.current).forEach((peer) => peer.close());
+
+      if (localStream) {
+        localStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-slate-950 p-8">
+      <h1 className="text-3xl font-bold text-white mb-8">
+        Room : {roomId}
+      </h1>
+
+      <div className="flex flex-wrap gap-6">
+        {localStream && (
+          <VideoPlayer stream={localStream} muted />
+        )}
+
+        {remoteStreams.map((user) => (
+          <VideoPlayer
+            key={user.id}
+            stream={user.stream}
+          />
+        ))}
       </div>
-
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-const VideoPlayer = ({ stream, muted }) => {
+const VideoPlayer = ({ stream, muted = false }) => {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -15,7 +15,7 @@ const VideoPlayer = ({ stream, muted }) => {
       autoPlay
       playsInline
       muted={muted}
-      className="w-[350px] rounded-xl bg-black"
+      className="w-[380px] h-[280px] bg-black rounded-xl object-cover border border-slate-700"
     />
   );
 };

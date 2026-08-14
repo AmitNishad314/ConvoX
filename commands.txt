@@ -13,7 +13,7 @@ npm create vite@latest frontend
 cd frontend
 npm install
 npm i simple-peer
-
+npm install buffer process
 
 npm install axios socket.io-client react-router-dom
 npm install -D tailwindcss @tailwindcss/vite

@@ -1,85 +1,57 @@
+import { Server } from "socket.io";
 
-import {Server} from "socket.io"
+const connectToSocket = (server) => {
+  const io = new Server(server, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"],
+    },
+  });
 
+  io.on("connection", (socket) => {
+    console.log("Connected:", socket.id);
 
-let messages = {}
-let timeOnline = {}
+    socket.on("join-room", (roomId) => {
+      socket.join(roomId);
 
-const connectToSocket = (server)=>{
-    const io = new Server(server,{
-        cors:{
-            origin:'*',
-            methods: ['GET','POST'],
-            allowedHeaders:['*'],
-            credentials: true
-        }
+      const clients = [...io.sockets.adapter.rooms.get(roomId) || []];
+
+      socket.emit(
+        "room-users",
+        clients.filter((id) => id !== socket.id)
+      );
+
+      socket.to(roomId).emit("user-joined", socket.id);
     });
-     
-    io.on("connection",(socket)=>{
-        console.log("Socket Connected:", socket.id);
 
-        socket.on("join-call", (roomId) => {
+    socket.on("offer", ({ target, offer }) => {
+      io.to(target).emit("offer", {
+        offer,
+        caller: socket.id,
+      });
+    });
 
-            socket.join(roomId);
-        
-            timeOnline[socket.id] = new Date();
-        
-            socket.to(roomId).emit("user-joined", socket.id);
-        
-            if (!messages[roomId]) return;
-        
-            messages[roomId].forEach((msg) => {
-                socket.emit(
-                    "chat-message",
-                    msg.data,
-                    msg.sender,
-                    msg["socket-id-sender"]
-                );
-            });
-        
-        });
-        socket.on("signal",(toId,message)=>{
-            io.to(toId).emit("signal",socket.id ,message);
-        })
-        socket.on("chat-message", (data, sender, roomId) => {
+    socket.on("answer", ({ target, answer }) => {
+      io.to(target).emit("answer", {
+        answer,
+        caller: socket.id,
+      });
+    });
 
-            if (!messages[roomId]) {
-                messages[roomId] = [];
-            }
-        
-            messages[roomId].push({
-                sender,
-                data,
-                "socket-id-sender": socket.id,
-            });
-        
-            io.to(roomId).emit(
-                "chat-message",
-                data,
-                sender,
-                socket.id
-            );
-        
-        });
-            
+    socket.on("ice-candidate", ({ target, candidate }) => {
+      io.to(target).emit("ice-candidate", {
+        candidate,
+        caller: socket.id,
+      });
+    });
 
-        socket.on("disconnect", () => {
+    socket.on("disconnect", () => {
+      console.log("Disconnected:", socket.id);
+      socket.broadcast.emit("user-left", socket.id);
+    });
+  });
 
-            console.log(`${socket.id} disconnected`);
-        
-            for (const roomId of socket.rooms) {
-        
-                if (roomId !== socket.id) {
-                    socket.to(roomId).emit("user-left", socket.id);
-                }
-        
-            }
-        
-            delete timeOnline[socket.id];
-        
-        });
-    })
+  return io;
+};
 
-    return io;
-}
-export default connectToSocket
+export default connectToSocket;
