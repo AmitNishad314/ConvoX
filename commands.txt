@@ -1,0 +1,18 @@
+// backend 
+npm init
+npm install express mongoose nodemon bycrypt
+socket io
+npm install crypto
+npm i cors --save
+
+
+
+//frontend
+socket io client
+npm create vite@latest frontend
+cd frontend
+npm install
+
+
+npm install axios socket.io-client react-router-dom
+npm install -D tailwindcss @tailwindcss/vite
