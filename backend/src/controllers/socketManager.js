@@ -44,7 +44,17 @@ const connectToSocket = (server) => {
         caller: socket.id,
       });
     });
-
+    
+    socket.on("chat-message", ({ roomId, message, sender }) => {
+        io.to(roomId).emit("chat-message", {
+          sender,
+          message,
+          time: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        });
+      });
     socket.on("disconnect", () => {
       console.log("Disconnected:", socket.id);
       socket.broadcast.emit("user-left", socket.id);
