@@ -14,9 +14,20 @@ const server = createServer(app);
 
 connectToSocket(server);
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://convo-x-ten.vercel.app",
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
@@ -41,7 +52,7 @@ server.listen(PORT, async () => {
 
     console.log("Database:", connectDb.connection.name);
     console.log("Host:", connectDb.connection.host);
-    console.log(`MongoDB Connected`);
+    console.log("MongoDB Connected");
     console.log(`Server running on port ${PORT}`);
   } catch (err) {
     console.error("MongoDB connection failed:", err.message);
