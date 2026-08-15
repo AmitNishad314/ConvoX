@@ -4,6 +4,7 @@ npm install express mongoose nodemon bycrypt
 socket io
 npm install crypto
 npm i cors --save
+npm install dotenv
 
 
 
